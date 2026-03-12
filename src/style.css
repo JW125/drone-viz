@@ -150,3 +150,30 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .feasibility-row.red .feasibility-status { color: #e74c3c; }
 .feasibility-detail { color: var(--text-secondary); font-size: 10px; margin-top: 2px; margin-left: 14px; }
 .feasibility-more { color: var(--text-muted); font-size: 10px; text-align: center; margin-top: 6px; }
+
+/* Route status messages */
+#route-status { font-size: 11px; margin-top: 4px; }
+.route-status-error { color: #e74c3c; }
+.route-status-warn { color: #ffd166; }
+.route-status-ok { color: #2ecc71; }
+.route-status-info { color: var(--accent); }
+
+/* Route results summary */
+.route-results-summary { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; }
+.route-dist-road { color: #ffd166; }
+.route-dist-straight { color: var(--text-muted); }
+.route-dist-rt { color: var(--text-primary); }
+.route-fallback-badge { font-size: 9px; background: rgba(255,209,102,0.15); color: #ffd166; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+
+/* Feasibility row inner elements */
+.feasibility-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.feasibility-dot.green { background: #2ecc71; }
+.feasibility-dot.yellow { background: #ffd166; }
+.feasibility-dot.red { background: #e74c3c; }
+.feasibility-delta { font-size: 10px; font-family: monospace; margin-left: auto; }
+.feasibility-delta.green { color: #2ecc71; }
+.feasibility-delta.yellow { color: #ffd166; }
+.feasibility-delta.red { color: #e74c3c; }
+.feasibility-row { display: flex; align-items: center; gap: 6px; border-radius: 6px; padding: 4px 8px; margin-bottom: 3px; background: rgba(255,255,255,0.02); }
+.feasibility-name { color: var(--text-primary); font-size: 11px; }
+.feasibility-detail { color: var(--text-muted); font-size: 9px; margin-left: 16px; }
