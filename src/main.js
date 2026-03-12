@@ -3,6 +3,7 @@ import { setState } from './state.js';
 import { initMap } from './map.js';
 import { initFilters } from './filters.js';
 import { initChart, renderDroneTags } from './chart.js';
+import { initRoute } from './route.js';
 
 async function init() {
   const response = await fetch('/drones.json');
@@ -13,6 +14,7 @@ async function init() {
   initFilters('filter-bar');
   initChart('parallel-chart');
   renderDroneTags('drone-tags');
+  initRoute();
 }
 
 init();
