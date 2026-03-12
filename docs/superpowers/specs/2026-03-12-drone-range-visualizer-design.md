@@ -69,9 +69,9 @@ Filter bar sits above the map with:
   "id": "dji-mavic-3-pro",
   "name": "Mavic 3 Pro",
   "manufacturer": "DJI",
-  "type": "prosumer",
+  "type": "prosumer",         // enum: "consumer", "prosumer", "enterprise", "delivery", "agricultural", "inspection"
   "maxRangeKm": 28,
-  "operationalRadiusKm": 14,
+  "operationalRadiusKm": 14,  // independently sourced, NOT always maxRangeKm/2 (varies by payload, wind profile, battery curve)
   "maxPayloadKg": 0.25,
   "rechargeTimeMin": 96,
   "flightTimeMin": 43,
@@ -86,6 +86,17 @@ Filter bar sits above the map with:
 **Nullable fields**: `msrp`, `msrpNote`, `maxPayloadKg`, `specsUrl`. Drone still renders on all non-null dimensions.
 
 Fields `weightKg`, `year`, and `specsUrl` are metadata — they appear in the hover tooltip but are not charted or filtered.
+
+## Drone Selection Model
+
+Filtering and individual selection are separate layers:
+
+1. **Filters** (manufacturer, type) determine the **visible pool** of drones
+2. Within the visible pool, **all drones are shown** on the chart and map by default
+3. Users can **click a drone's line** on the parallel coordinates chart or **click a circle** on the map to toggle individual drone highlighting
+4. Highlighted drones get full opacity; non-highlighted visible drones fade to 30%
+5. If no individual drones are highlighted, all visible drones render at full opacity (no highlight mode)
+6. **Drone tags** (colored chips) appear below the chart for individually highlighted drones. Click × to de-highlight.
 
 ## Map Behavior
 
