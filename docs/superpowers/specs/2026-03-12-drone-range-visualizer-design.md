@@ -11,6 +11,7 @@ A browser-based interactive tool for comparing commercial and consumer drone ope
 - Filter by manufacturer and drone type using multi-select dropdowns
 - Toggle between one-way max range and round-trip operational radius
 - No limit on simultaneous drone selections — color-coded with opacity management
+- **Route feasibility**: enter start and end addresses to see which drones can make the round-trip
 
 ## Target Data
 
@@ -34,6 +35,7 @@ drone-viz/
 │   ├── filters.js        # Multi-select dropdown components, filter state
 │   ├── state.js          # Shared app state (selected drones, center, range mode)
 │   ├── colors.js         # Manufacturer color palette
+│   ├── route.js           # Route feasibility — geocoding, flight path, drone matching
 │   └── style.css         # Dark theme, split layout, filter UI
 ├── data/
 │   └── drones.json       # Static drone spec database
@@ -50,12 +52,13 @@ drone-viz/
 | Charts | D3.js | Parallel coordinates, full control |
 | Styling | CSS (custom) | Dark theme, split-screen layout |
 | Data | Static JSON | `drones.json` baked into the build |
+| Geocoding | Nominatim (OpenStreetMap) | Free, no API key, address → lat/lng |
 
 ## Layout
 
 Split-screen design:
-- **Left (60%)**: Leaflet map with concentric range circles
-- **Right (40%)**: D3 parallel coordinates chart with selected drone tags
+- **Left (70%)**: Leaflet map with concentric range circles
+- **Right (30%)**: D3 parallel coordinates chart with selected drone tags
 
 Filter bar sits above the map with:
 - Manufacturer multi-select dropdown (checkbox list with chip tags)
@@ -108,6 +111,48 @@ Filtering and individual selection are separate layers:
 6. Smallest circles render on top (z-order)
 7. Hover a circle → tooltip with drone name, range, payload, flight time, weight, year
 8. When zoomed out past zoom level 8, arc labels collapse to manufacturer initials (e.g., "DJI" instead of "DJI Mavic 3 Pro — 14km"); hover to expand
+
+## Route Feasibility Mode
+
+A second interaction mode alongside the radius visualizer. Users enter two addresses to see which drones can complete the flight.
+
+### UI
+
+A collapsible panel below the filter bar with:
+- **Start address** text input with autocomplete (geocoded via Nominatim)
+- **End address** text input with autocomplete
+- **"Check Route"** button
+- **Results panel**: sorted list of drones showing feasibility status
+
+### Behavior
+
+1. User enters start and end addresses → geocoded to lat/lng via Nominatim (OpenStreetMap, free, no API key)
+2. Straight-line (haversine) distance calculated between the two points
+3. Round-trip distance = 2 × one-way distance
+4. Map draws:
+   - **Start pin** (green) and **End pin** (red)
+   - **Dashed line** connecting them with distance label at midpoint (e.g., "23.4 km one-way / 46.8 km round-trip")
+5. Each visible drone is evaluated:
+   - **Green check**: `operationalRadiusKm × 2 >= round-trip distance` (can do round-trip)
+   - **Yellow warning**: `maxRangeKm >= one-way distance` but can't round-trip (one-way only)
+   - **Red X**: `maxRangeKm < one-way distance` (can't reach destination)
+6. Results panel shows all visible drones sorted: green first, then yellow, then red. Each row shows drone name, manufacturer color dot, range, and surplus/deficit km.
+7. The concentric circles from radius mode remain visible (centered on start pin) so the user can see range context alongside the route.
+
+### Route + Radius Interaction
+
+- When a route is active, the **center point** auto-sets to the start address
+- Concentric circles render from the start pin, so the user sees which drones' circles encompass the end pin
+- Clearing the route (× button) returns to click-to-set-center mode
+
+### Edge Cases
+
+| Scenario | Behavior |
+|---------|----------|
+| Address not found | Show inline error: "Could not find that address. Try a more specific query." |
+| Same start and end | Show info: "Start and end are the same location. Distance: 0 km. All drones can make this trip." |
+| Very long route (>500km) | All drones likely red. Show note: "This route exceeds all known drone ranges." |
+| Nominatim rate limit | Nominatim allows 1 req/sec. Debounce autocomplete to 1 second. Show spinner during geocoding. |
 
 ## Parallel Coordinates Chart
 
