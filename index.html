@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drone Range Visualizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="filter-bar">
+      <div id="route-panel" class="filter-group route-panel">
+        <label class="filter-label route-toggle-label" style="cursor:pointer;">Route Feasibility ▸</label>
+        <div class="route-inputs collapsed">
+          <div class="route-input-row">
+            <span class="route-pin start">●</span>
+            <input type="text" id="route-start" class="route-input" placeholder="Start address..." />
+          </div>
+          <div class="route-input-row">
+            <span class="route-pin end">●</span>
+            <input type="text" id="route-end" class="route-input" placeholder="End address..." />
+          </div>
+          <div class="route-actions">
+            <button id="route-check" class="route-btn primary">Check Route</button>
+            <button id="route-clear" class="route-btn secondary">Clear ×</button>
+          </div>
+          <div id="route-status"></div>
+        </div>
+      </div>
+    </div>
+    <div id="main-content">
+      <div id="map-container">
+        <div id="map"></div>
+        <div id="map-prompt">Click anywhere on the map to set your location</div>
+      </div>
+      <div id="chart-container">
+        <div id="chart-header">Spec Comparison</div>
+        <div id="parallel-chart"></div>
+        <div id="drone-tags"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
