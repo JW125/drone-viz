@@ -20,6 +20,26 @@ A browser-based interactive tool for comparing commercial and consumer drone ope
 - **Source**: Web-researched from manufacturer spec sheets
 - **MSRP**: Included where readily available, otherwise null
 
+## Project Structure
+
+```
+drone-viz/
+├── index.html
+├── vite.config.js
+├── package.json
+├── src/
+│   ├── main.js          # Entry point — init map, chart, filters, wire events
+│   ├── map.js            # Leaflet map, circle rendering, SVG label overlays
+│   ├── chart.js          # D3 parallel coordinates chart
+│   ├── filters.js        # Multi-select dropdown components, filter state
+│   ├── state.js          # Shared app state (selected drones, center, range mode)
+│   ├── colors.js         # Manufacturer color palette
+│   └── style.css         # Dark theme, split layout, filter UI
+├── data/
+│   └── drones.json       # Static drone spec database
+└── docs/
+```
+
 ## Tech Stack
 
 | Layer | Technology | Rationale |
@@ -50,7 +70,6 @@ Filter bar sits above the map with:
   "name": "Mavic 3 Pro",
   "manufacturer": "DJI",
   "type": "prosumer",
-  "category": "camera",
   "maxRangeKm": 28,
   "operationalRadiusKm": 14,
   "maxPayloadKg": 0.25,
@@ -66,16 +85,18 @@ Filter bar sits above the map with:
 
 **Nullable fields**: `msrp`, `msrpNote`, `maxPayloadKg`, `specsUrl`. Drone still renders on all non-null dimensions.
 
+Fields `weightKg`, `year`, and `specsUrl` are metadata — they appear in the hover tooltip but are not charted or filtered.
+
 ## Map Behavior
 
 1. **Click anywhere** on the map to set center point (blue pin marker)
 2. Concentric circles animate outward from the center — one circle per selected drone
 3. Circle radius = `operationalRadiusKm` (round-trip mode) or `maxRangeKm` (one-way mode)
 4. Each circle is color-coded by manufacturer with 15% fill opacity, 60% border opacity
-5. **Drone name + range** rendered along the top arc of each circle via SVG text path
+5. **Drone name + range** rendered along the top arc of each circle using a custom Leaflet SVG overlay (`L.SVGOverlay` or `L.layerGroup` with SVG text paths). Each circle is an `L.circle` for geo-accurate radius; the label is a separate SVG overlay positioned on the circle's north arc.
 6. Smallest circles render on top (z-order)
-7. Hover a circle → tooltip with drone name, range, payload, flight time
-8. When zoomed out and labels overlap, collapse to manufacturer initials; hover to expand
+7. Hover a circle → tooltip with drone name, range, payload, flight time, weight, year
+8. When zoomed out past zoom level 8, arc labels collapse to manufacturer initials (e.g., "DJI" instead of "DJI Mavic 3 Pro — 14km"); hover to expand
 
 ## Parallel Coordinates Chart
 
@@ -84,7 +105,7 @@ Filter bar sits above the map with:
 - Color matches the drone's manufacturer color on the map
 - Within a manufacturer, individual drones use different dash patterns (solid, dashed, dotted)
 - **Axis brushing**: Drag a range on any axis to filter (e.g., only drones with >10km range)
-- Null values on an axis → line skips that axis segment
+- Null values on an axis → polyline draws a straight segment connecting the two neighboring non-null axes, skipping the null axis. If the last axis (MSRP) is null, the line ends at the previous axis.
 
 ## Filter System
 
@@ -94,8 +115,12 @@ Filter bar sits above the map with:
 - "Select All / Clear" shortcuts at top of each dropdown
 
 ### Filter Logic
-- Manufacturer AND Type combined: `selected_manufacturers ∩ selected_types`
-- Shows drones matching ANY selected manufacturer AND ANY selected type
+```
+visibleDrones = drones.filter(d =>
+  (selectedManufacturers.length === 0 || selectedManufacturers.includes(d.manufacturer))
+  && (selectedTypes.length === 0 || selectedTypes.includes(d.type))
+)
+```
 - Empty filter = show all for that dimension
 - Both empty = all drones visible
 
@@ -128,7 +153,7 @@ Within a manufacturer, drones differ by line dash pattern on chart and opacity v
 | Hover circle on map | Circle brightens, pulse | Corresponding line goes bold, others fade to 20% |
 | Hover line on chart | Others fade | Corresponding circle brightens + pulse |
 | Click drone tag (×) | Circle removed | Line removed |
-| Brush axis on chart | Circles for non-matching drones fade | Lines outside brush range fade |
+| Brush axis on chart | Non-matching circles fade to 5% fill / 20% border | Lines outside brush range fade to 10% opacity |
 
 ## Edge Cases
 
@@ -138,7 +163,19 @@ Within a manufacturer, drones differ by line dash pattern on chart and opacity v
 | No drones match filters | Map clears circles. Chart shows: "No drones match your filters." |
 | Many overlapping circles | 15% fill opacity layers gracefully. Hovered ring → full opacity + thick border. Smallest on top. |
 | Missing MSRP/payload | Show "N/A" in tooltip. Omit from chart axis. Drone still visible on other dimensions. |
-| Mobile/narrow viewport | Stack vertically — map on top, chart below. Filter bar collapses to hamburger. |
+
+## Initial State
+
+On first load:
+- Both filter dropdowns are empty → all drones visible (per "empty = all" rule)
+- Map centered on continental US (lat 39.8, lng -98.5, zoom 4)
+- No center pin set — map shows prompt: "Click anywhere to set your location"
+- Parallel coordinates chart renders all drones immediately (chart works without a map pin)
+- Range mode defaults to Round-trip
+
+## Deployment
+
+Static Vite build served locally during development (`vite dev`). No hosting target for v1 — local tool only.
 
 ## Out of Scope
 
@@ -147,3 +184,5 @@ Within a manufacturer, drones differ by line dash pattern on chart and opacity v
 - Backend API — all data is static JSON
 - Terrain/wind modeling affecting range
 - 3D visualization
+- Mobile/responsive layout (desktop-first, v1 only)
+- Accessibility (color-blind palette, keyboard nav) — future enhancement
