@@ -53,6 +53,7 @@ drone-viz/
 | Styling | CSS (custom) | Dark theme, split-screen layout |
 | Data | Static JSON | `drones.json` baked into the build |
 | Geocoding | Nominatim (OpenStreetMap) | Free, no API key, address → lat/lng |
+| Routing | OSRM (Open Source Routing Machine) | Free, no API key, road-snapped routes via `router.project-osrm.org` |
 
 ## Layout
 
@@ -127,17 +128,21 @@ A collapsible panel below the filter bar with:
 ### Behavior
 
 1. User enters start and end addresses → geocoded to lat/lng via Nominatim (OpenStreetMap, free, no API key)
-2. Straight-line (haversine) distance calculated between the two points
-3. Round-trip distance = 2 × one-way distance
-4. Map draws:
+2. Route fetched from OSRM (`router.project-osrm.org/route/v1/driving/`) which returns a road-following polyline and total distance
+3. The drone flight path is **loosely snapped to the road** — the OSRM polyline represents the road corridor, and the drone follows it with a max deviation of **1 mile (1.6 km)** from paved road. The route distance used for feasibility is the **OSRM road distance**, not straight-line haversine, since the drone must stay within the road corridor.
+4. Round-trip distance = 2 × one-way road distance
+5. Map draws:
    - **Start pin** (green) and **End pin** (red)
-   - **Dashed line** connecting them with distance label at midpoint (e.g., "23.4 km one-way / 46.8 km round-trip")
-5. Each visible drone is evaluated:
-   - **Green check**: `operationalRadiusKm × 2 >= round-trip distance` (can do round-trip)
-   - **Yellow warning**: `maxRangeKm >= one-way distance` but can't round-trip (one-way only)
-   - **Red X**: `maxRangeKm < one-way distance` (can't reach destination)
-6. Results panel shows all visible drones sorted: green first, then yellow, then red. Each row shows drone name, manufacturer color dot, range, and surplus/deficit km.
-7. The concentric circles from radius mode remain visible (centered on start pin) so the user can see range context alongside the route.
+   - **Road-snapped polyline** (solid white line following OSRM route geometry)
+   - **1-mile buffer zone** rendered as a semi-transparent corridor around the route polyline (the drone's allowed deviation envelope)
+   - **Distance label** at midpoint (e.g., "148 km road distance / 296 km round-trip")
+   - **Straight-line distance** shown in smaller text for reference (e.g., "130 km as-the-crow-flies")
+6. Each visible drone is evaluated:
+   - **Green check**: `operationalRadiusKm × 2 >= round-trip road distance` (can do round-trip along road)
+   - **Yellow warning**: `maxRangeKm >= one-way road distance` but can't round-trip (one-way only)
+   - **Red X**: `maxRangeKm < one-way road distance` (can't reach destination even one-way)
+7. Results panel shows all visible drones sorted: green first, then yellow, then red. Each row shows drone name, manufacturer color dot, range, and surplus/deficit km.
+8. The concentric circles from radius mode remain visible (centered on start pin) so the user can see range context alongside the route.
 
 ### Route + Radius Interaction
 
@@ -153,6 +158,8 @@ A collapsible panel below the filter bar with:
 | Same start and end | Show info: "Start and end are the same location. Distance: 0 km. All drones can make this trip." |
 | Very long route (>500km) | All drones likely red. Show note: "This route exceeds all known drone ranges." |
 | Nominatim rate limit | Nominatim allows 1 req/sec. Debounce autocomplete to 1 second. Show spinner during geocoding. |
+| OSRM route not found | No road connection (e.g., across ocean). Show error: "No road route found between these locations." Fall back to straight-line with a note. |
+| OSRM service down | Fall back to haversine straight-line distance. Show warning: "Road routing unavailable — showing straight-line distance." |
 
 ## Parallel Coordinates Chart
 
