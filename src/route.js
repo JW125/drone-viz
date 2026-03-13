@@ -1,4 +1,5 @@
 import { getState, setState, subscribe, getVisibleDrones } from './state.js';
+import { getMapInstance } from './map.js';
 
 // ─── haversine ────────────────────────────────────────────────────────────────
 
@@ -15,13 +16,55 @@ function haversineKm(a, b) {
 // ─── geocode via Nominatim ────────────────────────────────────────────────────
 
 async function geocode(address) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+  // Build viewbox bias from current map bounds for better results
+  const map = getMapInstance();
+  let viewbox = '';
+  if (map) {
+    const b = map.getBounds();
+    viewbox = `&viewbox=${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}&bounded=0`;
+  }
+
+  // Try structured search first if address looks like "123 Street, City, State"
+  const parts = address.split(',').map(s => s.trim());
+  let url;
+  if (parts.length >= 2) {
+    // Use structured query for better matching
+    const params = new URLSearchParams({
+      format: 'json',
+      street: parts[0],
+      city: parts[1],
+      state: parts[2] || '',
+      country: 'us',
+      limit: '1',
+      addressdetails: '1',
+    });
+    url = `https://nominatim.openstreetmap.org/search?${params}${viewbox}`;
+  } else {
+    // Free-form with country bias
+    url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=us&limit=5&addressdetails=1${viewbox}`;
+  }
+
   const res = await fetch(url, {
     headers: { 'User-Agent': 'DroneRangeViz/1.0' },
   });
   const data = await res.json();
-  if (!data || data.length === 0) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+
+  if (!data || data.length === 0) {
+    // Fallback: try free-form without structured parsing
+    if (parts.length >= 2) {
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=us&limit=5&addressdetails=1${viewbox}`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: { 'User-Agent': 'DroneRangeViz/1.0' },
+      });
+      const fallbackData = await fallbackRes.json();
+      if (fallbackData && fallbackData.length > 0) {
+        return { lat: parseFloat(fallbackData[0].lat), lng: parseFloat(fallbackData[0].lon), display: fallbackData[0].display_name };
+      }
+    }
+    return null;
+  }
+
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
 }
 
 // ─── sleep helper ─────────────────────────────────────────────────────────────
@@ -188,7 +231,7 @@ export function initRoute() {
       }
 
       if (!startCoord) {
-        setStatus('Could not find that address.', 'error');
+        setStatus('Could not find start address. Try: "123 Main St, Town, State"', 'error');
         checkBtn.disabled = false;
         return;
       }
@@ -209,7 +252,7 @@ export function initRoute() {
       }
 
       if (!endCoord) {
-        setStatus('Could not find that address.', 'error');
+        setStatus('Could not find end address. Try: "123 Main St, Town, State"', 'error');
         checkBtn.disabled = false;
         return;
       }
@@ -270,10 +313,6 @@ export function initRoute() {
         center: { lat: startCoord.lat, lng: startCoord.lng },
       });
 
-      // Hide map prompt
-      const prompt = document.getElementById('map-prompt');
-      if (prompt) prompt.style.display = 'none';
-
       const roundTripKm = roadDistanceKm * 2;
       const distMsg = fallback
         ? `Straight-line: ${roadDistanceKm.toFixed(1)} km one-way · ${roundTripKm.toFixed(1)} km round-trip`
@@ -296,10 +335,6 @@ export function initRoute() {
       if (endInput) endInput.value = '';
 
       setStatus('');
-
-      // Show map prompt again
-      const prompt = document.getElementById('map-prompt');
-      if (prompt) prompt.style.display = '';
 
       // Remove results panel
       const results = document.getElementById('route-results');

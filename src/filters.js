@@ -5,7 +5,8 @@ export function initFilters(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  container.innerHTML = `
+  // Prepend filter controls before the existing route panel
+  const filterHtml = `
     <div class="filter-group">
       <div class="filter-label">Manufacturer</div>
       <div class="multi-select" data-filter="manufacturer">
@@ -30,6 +31,7 @@ export function initFilters(containerId) {
       </div>
     </div>
   `;
+  container.insertAdjacentHTML('afterbegin', filterHtml);
 
   setupMultiSelect('manufacturer');
   setupMultiSelect('type');

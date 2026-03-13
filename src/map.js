@@ -10,15 +10,12 @@ import {
   toggleHighlight,
 } from './state.js';
 import { getManufacturerColor } from './colors.js';
+import { isPlacementMode, handlePlacementClick } from './placement.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
-/**
- * Returns the lat of the north-pole point on a circle of rangeKm
- * centred at `center` – used to anchor the arc label.
- */
 function getArcLabelPosition(center, rangeKm) {
   return {
     lat: center.lat + (rangeKm / 6371) * (180 / Math.PI),
@@ -26,21 +23,11 @@ function getArcLabelPosition(center, rangeKm) {
   };
 }
 
-/**
- * Compute a closed buffer polygon around a polyline.
- * Offsets every segment by `bufferKm` km to the left and right,
- * then concatenates left-side + reversed right-side to close the ring.
- *
- * @param {Array<[number,number]>} latlngs  – [[lat,lng], ...]
- * @param {number} bufferKm
- * @returns {Array<[number,number]>}
- */
 function computeBufferPolygon(latlngs, bufferKm) {
   const R = 6371;
   const toRad = d => (d * Math.PI) / 180;
   const toDeg = r => (r * 180) / Math.PI;
 
-  // Offset a single point by `distKm` in direction `bearingRad`
   function offsetPoint(lat, lng, bearingRad, distKm) {
     const d = distKm / R;
     const lat1 = toRad(lat);
@@ -58,7 +45,6 @@ function computeBufferPolygon(latlngs, bufferKm) {
     return [toDeg(lat2), toDeg(lng2)];
   }
 
-  // Bearing from point A to point B (radians)
   function bearing(lat1, lng1, lat2, lng2) {
     const dLng = toRad(lng2 - lng1);
     const rlat1 = toRad(lat1);
@@ -94,15 +80,14 @@ function computeBufferPolygon(latlngs, bufferKm) {
 // ─── module state ────────────────────────────────────────────────────────────
 
 let map = null;
-let circleLayers = [];
+let circleLayers = [];       // all Leaflet layers to remove on rebuild
 let centerMarker = null;
 let routeLayers = [];
+let droneCircleData = [];    // [{drone, circle, color}] for hover updates
+let lastSnapshotKey = '';    // detect when a full rebuild is needed vs hover-only
 
 // ─── animation ──────────────────────────────────────────────────────────────
 
-/**
- * Animate a Leaflet circle from 0 → targetRadius over `duration` ms.
- */
 function animateCircle(circle, targetRadius, duration = 600) {
   const start = performance.now();
   function frame(now) {
@@ -154,15 +139,64 @@ function getInitials(name) {
     .slice(0, 4);
 }
 
-// ─── renderCircles ────────────────────────────────────────────────────────────
+// ─── opacity logic ───────────────────────────────────────────────────────────
+
+function getCircleOpacity(drone, hoveredDroneId) {
+  const hovered = hoveredDroneId === drone.id;
+  const highlighted = isHighlighted(drone.id);
+  const brushed = passesBrushFilter(drone);
+
+  let fillOpacity, opacity;
+  if (hovered) {
+    fillOpacity = 0.30; opacity = 1.0;
+  } else if (highlighted && brushed) {
+    fillOpacity = 0.15; opacity = 0.6;
+  } else if (!brushed) {
+    fillOpacity = 0.02; opacity = 0.1;
+  } else {
+    fillOpacity = highlighted ? 0.15 : 0.03;
+    opacity = highlighted ? 0.6 : 0.15;
+  }
+  return { fillOpacity, opacity };
+}
+
+// ─── snapshot key ────────────────────────────────────────────────────────────
+// Build a string that changes when we need a full rebuild (center moved,
+// filters changed, brush changed, highlights changed) but stays the same
+// when only hoveredDroneId changed.
+
+function getSnapshotKey() {
+  const s = getState();
+  const vis = getVisibleDrones().map(d => d.id).join(',');
+  const hl = [...s.highlightedDroneIds].sort().join(',');
+  const br = JSON.stringify(s.brushRanges);
+  const c = s.center ? `${s.center.lat},${s.center.lng}` : '';
+  const z = map ? map.getZoom() : '';
+  const rm = s.rangeMode;
+  return `${c}|${z}|${vis}|${hl}|${br}|${rm}`;
+}
+
+// ─── updateCircleStyles (hover-only, no rebuild) ─────────────────────────────
+
+function updateCircleStyles() {
+  const { hoveredDroneId } = getState();
+  for (const entry of droneCircleData) {
+    const { drone, circle } = entry;
+    const { fillOpacity, opacity } = getCircleOpacity(drone, hoveredDroneId);
+    circle.setStyle({ fillOpacity, opacity });
+  }
+}
+
+// ─── renderCircles (full rebuild) ────────────────────────────────────────────
 
 function renderCircles() {
   if (!map) return;
-  const { center, hoveredDroneId, route } = getState();
+  const { center, hoveredDroneId } = getState();
 
   // Clear previous circles / marker
   circleLayers.forEach(l => map.removeLayer(l));
   circleLayers = [];
+  droneCircleData = [];
   if (centerMarker) { map.removeLayer(centerMarker); centerMarker = null; }
 
   if (!center) return;
@@ -179,7 +213,7 @@ function renderCircles() {
   }).addTo(map);
   circleLayers.push(centerMarker);
 
-  // Drones sorted largest range first (so smallest renders on top)
+  // Sort: largest range first → drawn first → sits on bottom
   const drones = getVisibleDrones().slice().sort(
     (a, b) => getDroneRange(b) - getDroneRange(a)
   );
@@ -191,23 +225,9 @@ function renderCircles() {
     if (!rangeKm) return;
 
     const color = getManufacturerColor(drone.manufacturer);
-    const hovered = hoveredDroneId === drone.id;
-    const highlighted = isHighlighted(drone.id);
-    const brushed = passesBrushFilter(drone);
+    const { fillOpacity, opacity } = getCircleOpacity(drone, hoveredDroneId);
 
-    let fillOpacity, opacity;
-    if (hovered) {
-      fillOpacity = 0.25; opacity = 1.0;
-    } else if (highlighted && brushed) {
-      fillOpacity = 0.15; opacity = 0.6;
-    } else if (!brushed) {
-      fillOpacity = 0.02; opacity = 0.1;
-    } else {
-      // highlighted===true when set is empty (all visible), or this one is in set
-      fillOpacity = highlighted ? 0.15 : 0.03;
-      opacity = highlighted ? 0.6 : 0.15;
-    }
-
+    // Visual circle — non-interactive
     const circle = L.circle([center.lat, center.lng], {
       radius: 0,
       color,
@@ -215,25 +235,13 @@ function renderCircles() {
       fillOpacity,
       opacity,
       weight: 1.5,
-      interactive: true,
+      interactive: false,
     }).addTo(map);
 
-    circle.bindTooltip(buildTooltipHtml(drone, color), {
-      className: 'drone-tooltip',
-      sticky: true,
-      opacity: 1,
-    });
-
-    circle.on('mouseover', () => setState({ hoveredDroneId: drone.id }));
-    circle.on('mouseout', () => setState({ hoveredDroneId: null }));
-    circle.on('click', e => {
-      L.DomEvent.stopPropagation(e);
-      toggleHighlight(drone.id);
-    });
-
     circleLayers.push(circle);
+    droneCircleData.push({ drone, circle, color });
 
-    // Animate from 0 → target
+    // Animate
     animateCircle(circle, rangeKm * 1000);
 
     // Arc label at north point
@@ -249,6 +257,115 @@ function renderCircles() {
     }).addTo(map);
     circleLayers.push(arcLabel);
   });
+
+  lastSnapshotKey = getSnapshotKey();
+}
+
+// ─── onStateChange ───────────────────────────────────────────────────────────
+// Called on every state change. Does a full rebuild only when something
+// structural changed; otherwise just tweaks circle opacities for hover.
+
+function onStateChange() {
+  const key = getSnapshotKey();
+  if (key !== lastSnapshotKey) {
+    renderCircles();
+    renderRoute();
+  } else {
+    updateCircleStyles();
+  }
+}
+
+// ─── map-level hover detection ───────────────────────────────────────────────
+// Instead of per-circle mouse events (which fight each other), use a single
+// mousemove on the map to find which circle's EDGE is closest to the cursor.
+
+function setupMapHover() {
+  let currentHoveredId = null;
+
+  map.on('mousemove', (e) => {
+    const latlng = e.latlng;
+    let closestId = null;
+    let closestEdgeDist = Infinity;
+
+    for (const entry of droneCircleData) {
+      const { drone, circle } = entry;
+      const radiusM = circle.getRadius();
+      if (!radiusM) continue;
+
+      const centerLatLng = circle.getLatLng();
+      const distFromCenter = map.distance(latlng, centerLatLng);
+      const distFromEdge = Math.abs(distFromCenter - radiusM);
+
+      // Only consider if cursor is within 15px of the ring edge (in meters)
+      const metersPerPixel = 40075016.686 * Math.cos(latlng.lat * Math.PI / 180)
+        / Math.pow(2, map.getZoom() + 8);
+      const thresholdM = metersPerPixel * 15;
+
+      if (distFromEdge < thresholdM && distFromEdge < closestEdgeDist) {
+        closestEdgeDist = distFromEdge;
+        closestId = drone.id;
+      }
+    }
+
+    if (closestId !== currentHoveredId) {
+      currentHoveredId = closestId;
+      setState({ hoveredDroneId: closestId });
+    }
+  });
+
+  map.on('mouseout', () => {
+    if (currentHoveredId !== null) {
+      currentHoveredId = null;
+      setState({ hoveredDroneId: null });
+    }
+  });
+}
+
+// ─── map-level click detection ───────────────────────────────────────────────
+
+function setupMapClick() {
+  map.on('click', e => {
+    // Placement mode takes priority
+    if (isPlacementMode()) {
+      handlePlacementClick(e.latlng);
+      return;
+    }
+
+    const { route } = getState();
+
+    // Check if click is near a circle edge first
+    const latlng = e.latlng;
+    let closestId = null;
+    let closestEdgeDist = Infinity;
+
+    for (const entry of droneCircleData) {
+      const { drone, circle } = entry;
+      const radiusM = circle.getRadius();
+      if (!radiusM) continue;
+
+      const centerLatLng = circle.getLatLng();
+      const distFromCenter = map.distance(latlng, centerLatLng);
+      const distFromEdge = Math.abs(distFromCenter - radiusM);
+
+      const metersPerPixel = 40075016.686 * Math.cos(latlng.lat * Math.PI / 180)
+        / Math.pow(2, map.getZoom() + 8);
+      const thresholdM = metersPerPixel * 15;
+
+      if (distFromEdge < thresholdM && distFromEdge < closestEdgeDist) {
+        closestEdgeDist = distFromEdge;
+        closestId = drone.id;
+      }
+    }
+
+    if (closestId) {
+      toggleHighlight(closestId);
+      return;
+    }
+
+    // No circle edge hit — set center (unless route mode)
+    if (route) return;
+    setState({ center: { lat: e.latlng.lat, lng: e.latlng.lng } });
+  });
 }
 
 // ─── renderRoute ──────────────────────────────────────────────────────────────
@@ -257,7 +374,6 @@ export function renderRoute() {
   if (!map) return;
   const { route } = getState();
 
-  // Clear previous route layers
   routeLayers.forEach(l => map.removeLayer(l));
   routeLayers = [];
 
@@ -266,7 +382,6 @@ export function renderRoute() {
   const { latlngs, distanceKm, straightKm } = route;
   if (!latlngs || latlngs.length < 2) return;
 
-  // Buffer polygon (1.6 km offset)
   const bufferPoly = computeBufferPolygon(latlngs, 1.6);
   const bufferLayer = L.polygon(bufferPoly, {
     color: '#ffd166',
@@ -278,7 +393,6 @@ export function renderRoute() {
   }).addTo(map);
   routeLayers.push(bufferLayer);
 
-  // Road polyline
   const roadLine = L.polyline(latlngs, {
     color: '#ffd166',
     weight: 2.5,
@@ -287,7 +401,6 @@ export function renderRoute() {
   }).addTo(map);
   routeLayers.push(roadLine);
 
-  // Straight-line reference
   const start = latlngs[0];
   const end = latlngs[latlngs.length - 1];
   const straightLine = L.polyline([start, end], {
@@ -299,29 +412,18 @@ export function renderRoute() {
   }).addTo(map);
   routeLayers.push(straightLine);
 
-  // Start pin
   const startPin = L.circleMarker(start, {
-    radius: 7,
-    color: '#2ecc71',
-    fillColor: '#2ecc71',
-    fillOpacity: 1,
-    weight: 2,
-    interactive: false,
+    radius: 7, color: '#2ecc71', fillColor: '#2ecc71',
+    fillOpacity: 1, weight: 2, interactive: false,
   }).addTo(map);
   routeLayers.push(startPin);
 
-  // End pin
   const endPin = L.circleMarker(end, {
-    radius: 7,
-    color: '#e74c3c',
-    fillColor: '#e74c3c',
-    fillOpacity: 1,
-    weight: 2,
-    interactive: false,
+    radius: 7, color: '#e74c3c', fillColor: '#e74c3c',
+    fillOpacity: 1, weight: 2, interactive: false,
   }).addTo(map);
   routeLayers.push(endPin);
 
-  // Distance label at midpoint
   const midIdx = Math.floor(latlngs.length / 2);
   const mid = latlngs[midIdx];
   const labelHtml = straightKm
@@ -340,6 +442,8 @@ export function renderRoute() {
 
 // ─── initMap ─────────────────────────────────────────────────────────────────
 
+export function getMapInstance() { return map; }
+
 export function initMap(containerId) {
   map = L.map(containerId, {
     center: [39.8, -98.5],
@@ -347,9 +451,8 @@ export function initMap(containerId) {
     zoomControl: true,
   });
 
-  // CartoDB dark tiles (free, no API key)
   L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
@@ -358,21 +461,13 @@ export function initMap(containerId) {
     }
   ).addTo(map);
 
-  // Map click → set center, hide prompt
-  map.on('click', e => {
-    const { route } = getState();
-    if (route) return; // skip if route mode is active
-    setState({ center: { lat: e.latlng.lat, lng: e.latlng.lng } });
-    const prompt = document.getElementById('map-prompt');
-    if (prompt) prompt.style.display = 'none';
-  });
+  // Single map-level hover + click (no per-circle events = no flicker)
+  setupMapHover();
+  setupMapClick();
 
-  // Re-render circles on zoom (label text changes at zoom 8)
+  // Re-render on zoom (label text changes at zoom 8)
   map.on('zoomend', () => renderCircles());
 
   // Subscribe to state changes
-  subscribe(() => {
-    renderCircles();
-    renderRoute();
-  });
+  subscribe(onStateChange);
 }
