@@ -61,7 +61,7 @@ export function initStructureOverlay() {
     }
 
     try {
-      const resp = await fetch(`/${town}-structures.json`);
+      const resp = await fetch(`${import.meta.env.BASE_URL}${town}-structures.json`);
       const data = await resp.json();
       renderStructures(data);
     } catch (e) {

@@ -182,9 +182,9 @@ export function handlePlacementClick(latlng) {
     group.layers.push(circle);
   }
 
-  // Pin marker
+  // Pin marker — click to remove
   const pin = L.circleMarker([latlng.lat, latlng.lng], {
-    radius: 5,
+    radius: 7,
     color,
     fillColor: color,
     fillOpacity: 1,
@@ -198,8 +198,7 @@ export function handlePlacementClick(latlng) {
     sticky: true,
   });
 
-  // Double-click pin to remove this placement
-  pin.on('dblclick', (e) => {
+  pin.on('click', (e) => {
     L.DomEvent.stopPropagation(e);
     removePlacement(group);
   });

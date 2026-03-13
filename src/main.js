@@ -13,7 +13,7 @@ import {
 } from './overlays.js';
 
 async function init() {
-  const response = await fetch('/drones.json');
+  const response = await fetch(`${import.meta.env.BASE_URL}drones.json`);
   const drones = await response.json();
   setState({ drones });
 
