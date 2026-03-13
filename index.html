@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drone Range Visualizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script type="module" crossorigin src="/assets/index-BYc70Qmh.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D8ldPKu9.css">
+</head>
+<body>
+  <div id="app">
+    <div id="filter-bar">
+      <div id="route-panel" class="filter-group route-panel">
+        <label class="filter-label route-toggle-label" style="cursor:pointer;">Route Feasibility ▾</label>
+        <div class="route-inputs">
+          <div class="route-input-row">
+            <span class="route-pin start">●</span>
+            <input type="text" id="route-start" class="route-input" placeholder="123 Main St, Town, NH" />
+          </div>
+          <div class="route-input-row">
+            <span class="route-pin end">●</span>
+            <input type="text" id="route-end" class="route-input" placeholder="456 Elm St, Town, NH" />
+          </div>
+          <div class="route-actions">
+            <button id="route-check" class="route-btn primary">Check Route</button>
+            <button id="route-clear" class="route-btn secondary">Clear ×</button>
+          </div>
+          <div id="route-status"></div>
+        </div>
+      </div>
+    </div>
+    <div id="main-content">
+      <div id="map-container">
+        <div id="map"></div>
+
+        <!-- Map controls overlay -->
+        <div id="map-controls">
+          <button id="add-drone-btn" class="map-ctrl-btn" title="Place a drone on the map">+</button>
+          <select id="town-select" class="map-ctrl-select" title="Structure overlay">
+            <option value="">Structures...</option>
+            <optgroup label="Carroll County, NH">
+              <option value="albany">Albany</option><option value="bartlett">Bartlett</option>
+              <option value="brookfield">Brookfield</option><option value="chatham">Chatham</option>
+              <option value="conway">Conway</option><option value="eaton">Eaton</option>
+              <option value="effingham">Effingham</option><option value="freedom">Freedom</option>
+              <option value="jackson">Jackson</option><option value="madison">Madison</option>
+              <option value="moultonborough">Moultonborough</option><option value="ossipee">Ossipee</option>
+              <option value="sandwich">Sandwich</option><option value="tamworth">Tamworth</option>
+              <option value="tuftonboro">Tuftonboro</option><option value="wakefield">Wakefield</option>
+              <option value="wolfeboro">Wolfeboro</option>
+            </optgroup>
+            <optgroup label="Coos County, NH">
+              <option value="berlin">Berlin</option><option value="carroll">Carroll</option>
+              <option value="clarksville">Clarksville</option><option value="colebrook">Colebrook</option>
+              <option value="columbia">Columbia</option><option value="dalton">Dalton</option>
+              <option value="dummer">Dummer</option><option value="errol">Errol</option>
+              <option value="gorham">Gorham</option><option value="jefferson">Jefferson</option>
+              <option value="lancaster">Lancaster</option><option value="milan">Milan</option>
+              <option value="northumberland">Northumberland</option><option value="pittsburg">Pittsburg</option>
+              <option value="randolph">Randolph</option><option value="shelburne">Shelburne</option>
+              <option value="stark">Stark</option><option value="stewartstown">Stewartstown</option>
+              <option value="stratford">Stratford</option><option value="whitefield">Whitefield</option>
+            </optgroup>
+            <optgroup label="Grafton County, NH">
+              <option value="alexandria">Alexandria</option><option value="ashland">Ashland</option>
+              <option value="bath">Bath</option><option value="benton">Benton</option>
+              <option value="bethlehem">Bethlehem</option><option value="bridgewater">Bridgewater</option>
+              <option value="bristol">Bristol</option><option value="campton">Campton</option>
+              <option value="canaan">Canaan</option><option value="dorchester">Dorchester</option>
+              <option value="easton">Easton</option><option value="ellsworth">Ellsworth</option>
+              <option value="enfield">Enfield</option><option value="franconia">Franconia</option>
+              <option value="grafton">Grafton</option><option value="groton">Groton</option>
+              <option value="hanover">Hanover</option><option value="haverhill">Haverhill</option>
+              <option value="hebron">Hebron</option><option value="holderness">Holderness</option>
+              <option value="landaff">Landaff</option><option value="lebanon">Lebanon</option>
+              <option value="lincoln">Lincoln</option><option value="lisbon">Lisbon</option>
+              <option value="littleton">Littleton</option><option value="lyman">Lyman</option>
+              <option value="lyme">Lyme</option><option value="monroe">Monroe</option>
+              <option value="orange">Orange</option><option value="orford">Orford</option>
+              <option value="piermont">Piermont</option><option value="plymouth">Plymouth</option>
+              <option value="rumney">Rumney</option><option value="sugar-hill">Sugar Hill</option>
+              <option value="thornton">Thornton</option><option value="warren">Warren</option>
+              <option value="waterville-valley">Waterville Valley</option><option value="wentworth">Wentworth</option>
+              <option value="woodstock">Woodstock</option>
+            </optgroup>
+            <optgroup label="Franklin County, ME">
+              <option value="carrabassett-valley">Carrabassett Valley</option><option value="eustis">Eustis</option>
+              <option value="kingfield">Kingfield</option><option value="rangeley">Rangeley</option>
+            </optgroup>
+            <optgroup label="Oxford County, ME">
+              <option value="andover">Andover</option><option value="bethel-me">Bethel</option>
+              <option value="brownfield">Brownfield</option><option value="denmark-me">Denmark</option>
+              <option value="fryeburg">Fryeburg</option><option value="gilead">Gilead</option>
+              <option value="grafton-me">Grafton</option><option value="hanover-me">Hanover</option>
+              <option value="hiram">Hiram</option><option value="lovell">Lovell</option>
+              <option value="newry">Newry</option><option value="porter">Porter</option>
+              <option value="rumford">Rumford</option><option value="stow">Stow</option>
+              <option value="sweden">Sweden</option><option value="upton">Upton</option>
+            </optgroup>
+          </select>
+          <button id="toggle-businesses" class="map-ctrl-btn" title="Toggle nearby businesses">B</button>
+          <button id="toggle-satellite" class="map-ctrl-btn" title="Toggle satellite view">S</button>
+        </div>
+
+        <!-- Structure legend -->
+        <div id="structure-legend" class="hidden"></div>
+      </div>
+      <div id="chart-container">
+        <div id="chart-header">Spec Comparison</div>
+        <div id="parallel-chart"></div>
+        <div id="drone-tags"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Drone placement modal -->
+  <div id="drone-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>Place a Drone</span>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-label">Manufacturer</label>
+        <select id="modal-manufacturer" class="modal-select">
+          <option value="">Select manufacturer...</option>
+        </select>
+        <label class="modal-label">Type</label>
+        <select id="modal-type" class="modal-select">
+          <option value="">Select type...</option>
+        </select>
+        <label class="modal-label">Drone</label>
+        <select id="modal-drone" class="modal-select">
+          <option value="">Select drone...</option>
+        </select>
+        <div id="modal-stats" class="modal-stats"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-place" class="route-btn primary" disabled>Tap map to place</button>
+        <button id="modal-cancel" class="route-btn secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
